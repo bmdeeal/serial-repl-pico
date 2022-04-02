@@ -6,8 +6,8 @@ distributed under the ISC license, see <https://opensource.org/licenses/ISC> for
 This was mostly intended so I could attach my Pico to my Windows CE systems over serial.
 There is almost certainly a better way to do this (probably involving a recompiled micropython binary), but this was fun to write.
 
-Configure your device to emit only CR for enter, and ^H for backspace.
-Pressing ^J will emit a newline, which will allow you to add multiple lines to your input.
+Configure your device to emit only ^M (CR) for enter, and ^H for backspace. Disable local echo.
+Pressing ^J will emit a newline (LF), which will allow you to add multiple lines to your input.
 Run show_help() to see the rest of the available keys.
 load_and_patch() monkey-patches the print/input functions for any scripts you want to load and run.
 """
@@ -128,7 +128,7 @@ def in_line(txt=""):
                             out_chr(8)
                     else:
                         out_str("^H")
-in_line_prev=[]
+in_line_prev=[] #dirty hack; this whole program needs a refactor
 
 def input_test():
     """for testing whether things work"""
@@ -136,14 +136,31 @@ def input_test():
     uart0.write("test data: ")
     in_line()
 
+def ls(location="."):
+    """show a listing of the current directory"""
+    for fname in os.listdir():
+        out_line(fname)
+
+def reboot():
+    """restart the system"""
+    machine.reset()
+
+def bye():
+    """exit this REPL system"""
+    sys.exit()
+
 def show_help():
     """display some commands and keys"""
-    out_line("serial_repl.py -- connect a dumb terminal to the Pi Pico")
+    out_line("serial_repl.py -- connect a UART terminal to the Pi Pico")
     out_line("by B.M.Deeal.")
     out_line("Use load_and_patch('name') to load a program.")
-    out_line("sys.exit() will return to the USB REPL.")
-    out_line("os.listdir() will show a dir listing.")
-    out_line("machine.reset() will restart the Pico.")
+    out_line("This will redefine print() and input() for them.")
+    out_line("bye() will return to the USB REPL.")
+    out_line("ls() will show a dir listing.")
+    out_line("reboot() will restart the Pico.")
+    out_line("Use out_line() instead of print() to write to the terminal.")
+    out_line("Use in_line() instead of input() to read from the terminal.")
+    in_line("Press enter to continue...")
     out_line("^M will submit input.")
     out_line("^J will add a newline to the buffer.")
     out_line("^H will backspace a character from the buffer.")
