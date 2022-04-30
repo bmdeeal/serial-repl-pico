@@ -11,7 +11,7 @@ Pressing ^J will emit a newline (LF), which will allow you to add multiple lines
 Run show_help() to see the rest of the available keys.
 load_and_patch() monkey-patches the print/input functions for any scripts you want to load and run.
 """
-
+import machine
 from machine import UART, Pin
 import time
 import os
@@ -21,9 +21,14 @@ uart0 = UART(0, baudrate=9600, tx=Pin(0), rx=Pin(1))
 debug=False #mostly enables some debug info on stdout
 led_enable=True #enables the LED flashing when you type (you might want to disable this if your program uses the LED)
 true_tty=False #disables moving the cursor backwards with backspace since that'll overtype
+wait_period=200 #how many ms to wait between lines
 
 if led_enable:
     led = Pin(25, Pin.OUT)
+
+def sleep_wait_period():
+    """wait for the set period of time so we don't bog down the device (a slow CE system with software text scrolling)"""
+    time.sleep_ms(wait_period)
 
 def set_led_on():
     """turn on the LED if LED control enabled"""
@@ -46,14 +51,31 @@ def out_str(s=""):
 def out_nl():
     """write a newline to the attached terminal"""
     uart0.write("\r\n")
-    time.sleep_ms(200)
+    sleep_wait_period()
 
-def out_line(s="", *args, **kwargs):
-    """write a full line to the attached terminal"""
-    #args and kwargs are ignored and are there only for compatibility with print()
-    #TODO: should do some checks and actually call print if it redirects
-    out_str(s)
-    out_nl()
+def out_line(*args, **kwargs):
+    """
+    write a full line to the attached terminal
+    supports end and sep parameters
+    defers to print if a file param other than stdout is provided
+    """
+    #actually call print if it redirects
+    if "file" in kwargs and kwargs["file"]!=sys.stdout:
+        print(*args, **kwargs)
+        return
+    end="\r\n"
+    sep=" "
+    if "end" in kwargs:
+        end=kwargs["end"]
+    if "sep" in kwargs:
+        sep=kwargs["sep"]
+    for ii,s in enumerate(args):
+        out_str(s)
+        if ii != len(args)-1:
+            out_str(sep)
+    out_str(end)
+    if "\n" in end:
+        sleep_wait_period()
 
 def in_line(txt=""):
     """read a line from the attached terminal"""
@@ -149,6 +171,15 @@ def bye():
     """exit this REPL system"""
     sys.exit()
 
+def pause_for_more():
+    """
+    ask to continue
+    returns False if user enters text starting with q (like quit)
+    otherwise, returns True
+    """
+    result=in_line("Show more? (q to cancel)").strip().lower()
+    return not (result!="" and result[0]=="q")
+
 def show_help():
     """display some commands and keys"""
     out_line("serial_repl.py -- connect a UART terminal to the Pi Pico")
@@ -160,7 +191,8 @@ def show_help():
     out_line("reboot() will restart the Pico.")
     out_line("Use out_line() instead of print() to write to the terminal.")
     out_line("Use in_line() instead of input() to read from the terminal.")
-    in_line("Press enter to continue...")
+    if not pause_for_more():
+        return
     out_line("^M will submit input.")
     out_line("^J will add a newline to the buffer.")
     out_line("^H will backspace a character from the buffer.")
